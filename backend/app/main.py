@@ -10,25 +10,19 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from app.database import (
+    analyze_invoices,
     get_all_invoices,
     get_dashboard_summary,
-    get_department_invoices,
     get_department_spending,
-    get_invoice_summary,
-    get_invoices_by_amount_range,
-    get_invoices_by_risk,
-    get_invoices_by_risk_and_status,
-    get_pending_invoices_over,
     get_recent_invoices,
     get_risk_distribution,
     get_status_distribution,
     get_top_vendors,
-    get_vendor_spending,
     initialize_database,
     replace_invoices,
 )
 from app.services.ai_service import (
-    summarize_results,
+    summarize_analysis,
     understand_question,
 )
 from app.services.report_service import (
@@ -239,87 +233,54 @@ async def upload_invoices(
 @app.post("/assistant")
 def assistant(request: AssistantRequest):
     try:
-        analysis = understand_question(request.question)
-        intent = analysis.get("intent")
+        plan = understand_question(request.question)
 
-        if intent == "pending_invoices":
-            amount = float(analysis.get("amount") or 0)
-            results = get_pending_invoices_over(amount)
-
-        elif intent == "risk_invoices":
-            risk = analysis.get("risk") or "High"
-            results = get_invoices_by_risk(risk)
-
-        elif intent == "department_spending":
-            department = analysis.get("department")
-            results = get_department_spending(department)
-
-        elif intent == "vendor_spending":
-            vendor = analysis.get("vendor")
-            results = get_vendor_spending(vendor)
-
-        elif intent == "department_invoices":
-            department = analysis.get("department")
-
-            if not department:
-                return {
-                    "answer": "Please specify a department.",
-                    "results": [],
-                    "intent": intent,
-                }
-
-            results = get_department_invoices(department)
-
-        elif intent == "amount_range":
-            min_amount = float(
-                analysis.get("min_amount") or 0
-            )
-
-            max_amount = float(
-                analysis.get("max_amount") or 999999999
-            )
-
-            results = get_invoices_by_amount_range(
-                min_amount,
-                max_amount,
-            )
-
-        elif intent == "risk_and_status":
-            risk = analysis.get("risk") or "High"
-            status = analysis.get("status") or "Pending"
-
-            results = get_invoices_by_risk_and_status(
-                risk,
-                status,
-            )
-
-        elif intent == "invoice_summary":
-            results = get_invoice_summary()
-
-        else:
+        if plan.get("intent") == "unknown":
             return {
                 "answer": (
-                    "I can analyze invoice totals, vendor spending, "
-                    "department spending, risk, status, amount ranges, "
-                    "and invoice summaries."
+                    "I couldn't determine the requested analysis. "
+                    "Try asking about invoice amounts, vendors, departments, "
+                    "status, risk, spending, or comparisons."
                 ),
                 "results": [],
                 "intent": "unknown",
             }
 
-        answer = summarize_results(
+        analysis = analyze_invoices(plan)
+
+        answer = summarize_analysis(
             question=request.question,
-            results=results,
+            analysis=analysis,
         )
 
         return {
             "answer": answer,
-            "results": results,
-            "intent": intent,
+            "results": analysis["records"],
+            "intent": "invoice_analysis",
+            "analysis": {
+                "filters": analysis["filters"],
+                "summary": analysis["summary"],
+                "department_breakdown": analysis[
+                    "department_breakdown"
+                ],
+                "vendor_breakdown": analysis[
+                    "vendor_breakdown"
+                ],
+                "risk_breakdown": analysis["risk_breakdown"],
+                "status_breakdown": analysis["status_breakdown"],
+                "largest_invoice": analysis["largest_invoice"],
+                "smallest_invoice": analysis["smallest_invoice"],
+            },
         }
 
     except OpenAIError as error:
         raise HTTPException(
             status_code=502,
             detail="The OpenAI request failed.",
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail="The assistant analysis failed.",
         ) from error
