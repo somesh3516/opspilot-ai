@@ -10,8 +10,12 @@ import {
   User,
 } from "lucide-react"
 
-import { askAssistant } from "@/lib/api"
-import { AppSidebar } from "@/components/app-sidebar"
+import {
+  askAssistant,
+  type AssistantResult,
+} from "@/lib/api"
+import { AppSidebar } from "@/components/layout/app-sidebar"
+import { AssistantResultsTable } from "@/components/assistant/assistant-results-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,27 +35,25 @@ type Message = {
   id: number
   role: "user" | "assistant"
   content: string
-}
-
-type AssistantResponse = {
-  answer: string
+  results?: AssistantResult[]
 }
 
 const exampleQuestions = [
-  "Show pending invoices over $5,000.",
-  "Which invoices have elevated risk?",
-  "What department has the highest spending?",
+  "Show high-risk pending invoices.",
+  "Which vendor has the highest total spending?",
+  "Show invoices between $5,000 and $10,000.",
 ]
 
 export default function AssistantPage() {
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
       role: "assistant",
       content:
-        "Hello. I’m OpsPilot, your AI operations assistant. Ask me about invoices, spending, risk, approvals, or reports.",
+        "Hello. I’m OpsPilot, your AI operations assistant. Ask me about invoices, spending, risk, approvals, vendors, or departments.",
     },
   ])
 
@@ -77,13 +79,13 @@ export default function AssistantPage() {
     setIsLoading(true)
 
     try {
-      const response: AssistantResponse =
-        await askAssistant(messageText)
+      const response = await askAssistant(messageText)
 
       const assistantMessage: Message = {
         id: Date.now() + 1,
         role: "assistant",
         content: response.answer,
+        results: response.results,
       }
 
       setMessages((currentMessages) => [
@@ -97,7 +99,7 @@ export default function AssistantPage() {
         id: Date.now() + 1,
         role: "assistant",
         content:
-          "I could not connect to the OpsPilot backend. Make sure FastAPI is running on port 8000.",
+          "I could not complete that request. Make sure the OpsPilot backend is running.",
       }
 
       setMessages((currentMessages) => [
@@ -124,14 +126,14 @@ export default function AssistantPage() {
               </h1>
 
               <p className="text-sm text-muted-foreground">
-                Ask questions about business operations.
+                Ask questions about your uploaded business data.
               </p>
             </div>
           </div>
 
           <Badge variant="secondary">
             <Sparkles className="mr-1 h-3 w-3" />
-            Backend connected
+            AI connected
           </Badge>
         </header>
 
@@ -149,7 +151,7 @@ export default function AssistantPage() {
             </CardHeader>
 
             <CardContent className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-              <div className="flex-1 space-y-4 overflow-y-auto">
+              <div className="flex-1 space-y-6 overflow-y-auto">
                 {messages.map((message) => (
                   <div
                     key={message.id}
@@ -166,13 +168,29 @@ export default function AssistantPage() {
                     )}
 
                     <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+                      className={
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "border bg-muted/40"
-                      }`}
+                          ? "max-w-[80%]"
+                          : "w-full max-w-[90%]"
+                      }
                     >
-                      {message.content}
+                      <div
+                        className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                          message.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "border bg-muted/40"
+                        }`}
+                      >
+                        {message.content}
+                      </div>
+
+                      {message.role === "assistant" &&
+                        message.results &&
+                        message.results.length > 0 && (
+                          <AssistantResultsTable
+                            results={message.results}
+                          />
+                        )}
                     </div>
 
                     {message.role === "user" && (
@@ -261,7 +279,7 @@ export default function AssistantPage() {
                 </CardTitle>
 
                 <CardDescription>
-                  Data sources available to the assistant.
+                  Current data sources available to OpsPilot.
                 </CardDescription>
               </CardHeader>
 
@@ -277,7 +295,7 @@ export default function AssistantPage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span>Approval history</span>
+                  <span>Department data</span>
                   <Badge>Connected</Badge>
                 </div>
               </CardContent>
