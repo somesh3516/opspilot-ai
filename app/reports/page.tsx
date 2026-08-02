@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   Building2,
@@ -8,14 +8,15 @@ import {
   Download,
   FileText,
   Loader2,
-  Store,
 } from "lucide-react"
 
 import {
+  API_URL,
   getDashboardData,
   type DashboardResponse,
 } from "@/lib/api"
 import { AppSidebar } from "@/components/layout/app-sidebar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -29,10 +30,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:8000"
-
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -41,13 +38,17 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`
+}
+
 export default function ReportsPage() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    async function loadReport() {
+    async function loadReportData() {
       try {
         const response = await getDashboardData()
         setData(response)
@@ -55,52 +56,37 @@ export default function ReportsPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "Unable to load report."
+            : "Unable to load report data."
         )
       } finally {
         setLoading(false)
       }
     }
 
-    loadReport()
+    loadReportData()
   }, [])
 
-  const report = useMemo(() => {
-    if (!data) {
-      return null
-    }
-
-    const topDepartment = data.department_spending[0]
-    const topVendor = data.top_vendors[0]
-
-    const pendingRate =
-      data.summary.total_invoices > 0
-        ? (data.summary.pending_invoices /
-            data.summary.total_invoices) *
-          100
-        : 0
-
-    const highRiskRate =
-      data.summary.total_invoices > 0
-        ? (data.summary.high_risk_invoices /
-            data.summary.total_invoices) *
-          100
-        : 0
-
-    return {
-      topDepartment,
-      topVendor,
-      pendingRate,
-      highRiskRate,
-    }
-  }, [data])
-
-  function downloadPdf() {
-    window.open(
-      `${API_URL}/reports/operational-summary.pdf`,
-      "_blank"
-    )
+  function handleDownloadPdf() {
+    window.location.href =
+      `${API_URL}/reports/operational-summary.pdf`
   }
+
+  const pendingRate =
+    data && data.summary.total_invoices > 0
+      ? (data.summary.pending_invoices /
+          data.summary.total_invoices) *
+        100
+      : 0
+
+  const highRiskRate =
+    data && data.summary.total_invoices > 0
+      ? (data.summary.high_risk_invoices /
+          data.summary.total_invoices) *
+        100
+      : 0
+
+  const topDepartment = data?.department_spending?.[0]
+  const topVendor = data?.top_vendors?.[0]
 
   return (
     <>
@@ -113,22 +99,18 @@ export default function ReportsPage() {
 
             <div>
               <h1 className="text-lg font-semibold">
-                Reports
+                Operational Reports
               </h1>
 
               <p className="text-sm text-muted-foreground">
-                Review an operational summary of the active dataset.
+                Executive summary of the active invoice dataset.
               </p>
             </div>
           </div>
 
-          <Button
-            onClick={downloadPdf}
-            disabled={!data}
-          >
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
+          <Badge variant="secondary">
+            Live report
+          </Badge>
         </header>
 
         <main className="flex flex-1 flex-col gap-6 p-6">
@@ -142,22 +124,40 @@ export default function ReportsPage() {
           {error && (
             <Card>
               <CardHeader>
-                <CardTitle>Report unavailable</CardTitle>
-                <CardDescription>{error}</CardDescription>
+                <CardTitle>
+                  Report unavailable
+                </CardTitle>
+
+                <CardDescription>
+                  {error}
+                </CardDescription>
               </CardHeader>
             </Card>
           )}
 
-          {data && report && (
+          {data && (
             <>
-              <section>
-                <h2 className="text-3xl font-semibold">
-                  Operational Summary
-                </h2>
+              <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <Badge variant="outline">
+                    Executive summary
+                  </Badge>
 
-                <p className="mt-1 text-muted-foreground">
-                  Executive-level overview generated from the current invoice dataset.
-                </p>
+                  <h2 className="mt-3 text-3xl font-semibold">
+                    Operational Summary
+                  </h2>
+
+                  <p className="mt-1 max-w-2xl text-muted-foreground">
+                    Review spending, invoice volume, approval
+                    workload, and operational risk across the
+                    currently uploaded dataset.
+                  </p>
+                </div>
+
+                <Button onClick={handleDownloadPdf}>
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </Button>
               </section>
 
               <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -166,21 +166,29 @@ export default function ReportsPage() {
                     <CardTitle className="text-sm">
                       Total spend
                     </CardTitle>
+
                     <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
 
                   <CardContent>
                     <div className="text-2xl font-semibold">
-                      {formatCurrency(data.summary.total_spend)}
+                      {formatCurrency(
+                        data.summary.total_spend
+                      )}
                     </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Across the active dataset
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-sm">
-                      Total invoices
+                      Invoice volume
                     </CardTitle>
+
                     <FileText className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
 
@@ -188,6 +196,10 @@ export default function ReportsPage() {
                     <div className="text-2xl font-semibold">
                       {data.summary.total_invoices}
                     </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Total invoice records
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -196,13 +208,19 @@ export default function ReportsPage() {
                     <CardTitle className="text-sm">
                       Pending rate
                     </CardTitle>
+
                     <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
 
                   <CardContent>
                     <div className="text-2xl font-semibold">
-                      {report.pendingRate.toFixed(1)}%
+                      {formatPercent(pendingRate)}
                     </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {data.summary.pending_invoices} pending
+                      invoices
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -211,13 +229,19 @@ export default function ReportsPage() {
                     <CardTitle className="text-sm">
                       High-risk rate
                     </CardTitle>
+
                     <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
 
                   <CardContent>
                     <div className="text-2xl font-semibold">
-                      {report.highRiskRate.toFixed(1)}%
+                      {formatPercent(highRiskRate)}
                     </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {data.summary.high_risk_invoices} high-risk
+                      invoices
+                    </p>
                   </CardContent>
                 </Card>
               </section>
@@ -225,124 +249,147 @@ export default function ReportsPage() {
               <section className="grid gap-6 xl:grid-cols-2">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5" />
-                      Top department
+                    <CardTitle>
+                      Spending concentration
                     </CardTitle>
 
                     <CardDescription>
-                      Department with the highest total invoice spend.
+                      Highest-spend areas in the current dataset.
                     </CardDescription>
                   </CardHeader>
 
-                  <CardContent>
-                    <p className="text-2xl font-semibold">
-                      {report.topDepartment?.department ?? "N/A"}
-                    </p>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-start gap-3">
+                      <Building2 className="mt-1 h-5 w-5 text-muted-foreground" />
 
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {report.topDepartment
-                        ? `${formatCurrency(
-                            report.topDepartment.total_spending
-                          )} across ${
-                            report.topDepartment.invoice_count
-                          } invoices`
-                        : "No department data available."}
-                    </p>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Highest-spend department
+                        </p>
+
+                        <p className="font-semibold">
+                          {topDepartment
+                            ? topDepartment.department
+                            : "No data"}
+                        </p>
+
+                        {topDepartment && (
+                          <p className="text-sm text-muted-foreground">
+                            {formatCurrency(
+                              topDepartment.total_spending
+                            )}{" "}
+                            across{" "}
+                            {topDepartment.invoice_count} invoices
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <CircleDollarSign className="mt-1 h-5 w-5 text-muted-foreground" />
+
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Highest-spend vendor
+                        </p>
+
+                        <p className="font-semibold">
+                          {topVendor
+                            ? topVendor.vendor
+                            : "No data"}
+                        </p>
+
+                        {topVendor && (
+                          <p className="text-sm text-muted-foreground">
+                            {formatCurrency(
+                              topVendor.total_spending
+                            )}{" "}
+                            across {topVendor.invoice_count} invoices
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Store className="h-5 w-5" />
-                      Top vendor
+                    <CardTitle>
+                      Operational findings
                     </CardTitle>
 
                     <CardDescription>
-                      Vendor with the highest total invoice spend.
+                      Automatically calculated observations from
+                      the active dataset.
                     </CardDescription>
                   </CardHeader>
 
                   <CardContent>
-                    <p className="text-2xl font-semibold">
-                      {report.topVendor?.vendor ?? "N/A"}
-                    </p>
+                    <div className="space-y-4">
+                      <div className="rounded-lg border p-4">
+                        <p className="font-medium">
+                          Approval workload
+                        </p>
 
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {report.topVendor
-                        ? `${formatCurrency(
-                            report.topVendor.total_spending
-                          )} across ${
-                            report.topVendor.invoice_count
-                          } invoices`
-                        : "No vendor data available."}
-                    </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {data.summary.pending_invoices} of{" "}
+                          {data.summary.total_invoices} invoices are
+                          pending, representing{" "}
+                          {formatPercent(pendingRate)} of the current
+                          dataset.
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border p-4">
+                        <p className="font-medium">
+                          Risk exposure
+                        </p>
+
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {data.summary.high_risk_invoices} invoices
+                          are classified as high risk, representing{" "}
+                          {formatPercent(highRiskRate)} of all
+                          invoices.
+                        </p>
+                      </div>
+
+                      {topDepartment && (
+                        <div className="rounded-lg border p-4">
+                          <p className="font-medium">
+                            Department concentration
+                          </p>
+
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {topDepartment.department} has the
+                            highest departmental spend at{" "}
+                            {formatCurrency(
+                              topDepartment.total_spending
+                            )}
+                            .
+                          </p>
+                        </div>
+                      )}
+
+                      {topVendor && (
+                        <div className="rounded-lg border p-4">
+                          <p className="font-medium">
+                            Vendor concentration
+                          </p>
+
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {topVendor.vendor} is the highest-spend
+                            vendor at{" "}
+                            {formatCurrency(
+                              topVendor.total_spending
+                            )}
+                            .
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               </section>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Executive findings</CardTitle>
-
-                  <CardDescription>
-                    Key observations from the active invoice dataset.
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-4 text-sm">
-                  <p>
-                    The dataset contains{" "}
-                    <strong>{data.summary.total_invoices}</strong>{" "}
-                    invoices totaling{" "}
-                    <strong>
-                      {formatCurrency(data.summary.total_spend)}
-                    </strong>
-                    .
-                  </p>
-
-                  <p>
-                    <strong>{data.summary.pending_invoices}</strong>{" "}
-                    invoices are pending approval, representing{" "}
-                    <strong>{report.pendingRate.toFixed(1)}%</strong>{" "}
-                    of all records.
-                  </p>
-
-                  <p>
-                    <strong>{data.summary.high_risk_invoices}</strong>{" "}
-                    invoices are classified as high risk, or{" "}
-                    <strong>{report.highRiskRate.toFixed(1)}%</strong>{" "}
-                    of the dataset.
-                  </p>
-
-                  {report.topDepartment && (
-                    <p>
-                      <strong>{report.topDepartment.department}</strong>{" "}
-                      has the highest department spend at{" "}
-                      <strong>
-                        {formatCurrency(
-                          report.topDepartment.total_spending
-                        )}
-                      </strong>
-                      .
-                    </p>
-                  )}
-
-                  {report.topVendor && (
-                    <p>
-                      <strong>{report.topVendor.vendor}</strong>{" "}
-                      is the highest-spend vendor at{" "}
-                      <strong>
-                        {formatCurrency(
-                          report.topVendor.total_spending
-                        )}
-                      </strong>
-                      .
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
             </>
           )}
         </main>
